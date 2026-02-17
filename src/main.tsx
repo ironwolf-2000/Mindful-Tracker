@@ -1,8 +1,9 @@
 import { createRoot } from 'react-dom/client';
-import { router } from './router';
 import { MantineProvider } from '@mantine/core';
-import { RouterProvider } from 'react-router-dom';
+import { ModalsProvider } from '@mantine/modals';
 import { createGlobalStyle } from 'styled-components';
+import '@mantine/core/styles.css';
+import { App } from './App';
 
 const GlobalStyle = createGlobalStyle`
   *,
@@ -24,8 +25,8 @@ const GlobalStyle = createGlobalStyle`
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
       sans-serif;
     line-height: 1.4;
-    background-color: #fff;
-    color: #000;
+    background: #f5f2ec;
+    color: #3a3530;
   }
 
   button {
@@ -36,7 +37,9 @@ const GlobalStyle = createGlobalStyle`
 
 createRoot(document.getElementById('root')!).render(
   <MantineProvider>
-    <RouterProvider router={router} />
-    <GlobalStyle />
+    <ModalsProvider>
+      <App />
+      <GlobalStyle />
+    </ModalsProvider>
   </MantineProvider>,
 );
