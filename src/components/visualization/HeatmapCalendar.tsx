@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { Tooltip } from '@mantine/core';
-import type { DateRangeMode, Habit, TimePeriod } from '@/types';
+import { Tooltip, Modal, Stack } from '@mantine/core';
+import type { DateRangeMode, Habit, TimePeriod, Reflection } from '@/types';
+import { getActivityForDate } from '@/utils/habitMetrics';
 
 interface HeatmapCalendarProps {
   habit: Habit;
@@ -15,21 +16,17 @@ function getDateRange(period: TimePeriod, mode: DateRangeMode): { start: Date; e
   const end = new Date(today);
 
   if (mode === 'rolling') {
-    // Rolling periods - go back N days from today
     if (period === 'week') {
-      start.setDate(today.getDate() - 6); // Last 7 days
+      start.setDate(today.getDate() - 6);
     } else if (period === 'month') {
-      start.setDate(today.getDate() - 29); // Last 30 days
+      start.setDate(today.getDate() - 29);
     } else if (period === 'quarter') {
-      start.setDate(today.getDate() - 89); // Last 90 days
+      start.setDate(today.getDate() - 89);
     } else {
-      // year
-      start.setDate(today.getDate() - 364); // Last 365 days
+      start.setDate(today.getDate() - 364);
     }
   } else {
-    // Calendar periods - current calendar period
     if (period === 'week') {
-      // Start on Monday (1) instead of Sunday (0)
       const dayOfWeek = today.getDay();
       const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       start.setDate(today.getDate() - daysFromMonday);
@@ -41,7 +38,6 @@ function getDateRange(period: TimePeriod, mode: DateRangeMode): { start: Date; e
       start.setMonth(quarterStartMonth);
       start.setDate(1);
     } else {
-      // year
       start.setMonth(0);
       start.setDate(1);
     }
@@ -85,24 +81,33 @@ function generateWeeks(start: Date, end: Date): Date[][] {
   return weeks;
 }
 
-function getIntensity(habit: Habit, date: Date): number {
-  // TODO: Replace this mock logic with actual habit tracking data
-  // For now, using mock intensity based on day of week + some randomness
-  const day = date.getDate();
-  const dayOfWeek = date.getDay();
+function getIntensityFromValue(
+  value: boolean | number | null,
+  mode: 'Qualitative' | 'Quantitative',
+  goal?: number,
+): number {
+  if (value === null) return 0;
 
-  // Higher intensity on weekdays, lower on weekends (example)
-  const baseIntensity = dayOfWeek === 0 || dayOfWeek === 6 ? 0.3 : 0.7;
+  if (mode === 'Qualitative') {
+    return value ? 1 : 0;
+  }
 
-  // Add some pseudo-random variation based on habit id and date
-  const seed = (habit.id * 31 + day * 7 + dayOfWeek) % 1000;
-  const variation = ((seed * 1103515245 + 12345) % 100) / 100;
+  const numValue = value as number;
+  if (numValue === 0) return 0;
 
-  return Math.min(1, (baseIntensity + variation * 0.3) / 1.3);
+  const targetValue = goal || 50;
+  return Math.min(1, numValue / targetValue);
+}
+
+function getReflectionsForDate(reflections: Reflection[], date: Date): Reflection[] {
+  const dateStr = date.toISOString().split('T')[0];
+  return reflections.filter((r) => r.date === dateStr);
 }
 
 export const HeatmapCalendar: React.FC<HeatmapCalendarProps> = ({ habit, period }) => {
   const [mode, setMode] = useState<DateRangeMode>('calendar');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [modalReflections, setModalReflections] = useState<Reflection[]>([]);
 
   const { start, end } = useMemo(() => getDateRange(period, mode), [period, mode]);
   const weeks = useMemo(() => generateWeeks(start, end), [start, end]);
@@ -113,66 +118,137 @@ export const HeatmapCalendar: React.FC<HeatmapCalendarProps> = ({ habit, period 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const handleDayClick = (date: Date) => {
+    const reflections = getReflectionsForDate(habit.reflections, date);
+    if (reflections.length > 0) {
+      setSelectedDate(date);
+      setModalReflections(reflections);
+    }
+  };
+
+  const closeModal = () => {
+    setSelectedDate(null);
+    setModalReflections([]);
+  };
+
   return (
-    <Container>
-      <Header>
-        <Title>{`Activity this ${periodLabel}`}</Title>
-        <ToggleContainer>
-          <ToggleButton isActive={mode === 'calendar'} onClick={() => setMode('calendar')}>
-            Calendar
-          </ToggleButton>
-          <ToggleButton isActive={mode === 'rolling'} onClick={() => setMode('rolling')}>
-            Rolling
-          </ToggleButton>
-        </ToggleContainer>
-      </Header>
+    <>
+      <Container>
+        <Header>
+          <Title>{`Activity this ${periodLabel}`}</Title>
+          <ToggleContainer>
+            <ToggleButton isActive={mode === 'calendar'} onClick={() => setMode('calendar')}>
+              Calendar
+            </ToggleButton>
+            <ToggleButton isActive={mode === 'rolling'} onClick={() => setMode('rolling')}>
+              Rolling
+            </ToggleButton>
+          </ToggleContainer>
+        </Header>
 
-      <CalendarWrapper>
-        {weeks.map((week, weekIdx) => (
-          <WeekColumn key={weekIdx}>
-            {week.map((date, dayIdx) => {
-              const isInRange = date >= start && date <= end;
-              const isBeforeOrToday = date <= today;
-              const shouldShow = isInRange && isBeforeOrToday;
-              const intensity = shouldShow ? getIntensity(habit, date) : 0;
-              const dayLabel = date.toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
+        <CalendarWrapper>
+          {weeks.map((week, weekIdx) => (
+            <WeekColumn key={weekIdx}>
+              {week.map((date, dayIdx) => {
+                const isInRange = date >= start && date <= end;
+                const isBeforeOrToday = date <= today;
+                const shouldShow = isInRange && isBeforeOrToday;
 
-              return (
-                <Tooltip key={`${weekIdx}-${dayIdx}`} label={dayLabel} position='top' withArrow>
-                  <DayCell
-                    intensity={shouldShow ? intensity : 0}
-                    style={{
-                      opacity: shouldShow ? 1 : 0.15,
-                      cursor: shouldShow ? 'pointer' : 'default',
-                    }}
-                  />
-                </Tooltip>
-              );
-            })}
-          </WeekColumn>
-        ))}
-      </CalendarWrapper>
+                // Get real activity from dailyLogs
+                const activityValue = shouldShow ? getActivityForDate(habit.dailyLogs, date) : null;
+                const intensity = getIntensityFromValue(activityValue, habit.mode, habit.goal);
 
-      <LegendContainer>
-        <span>Less</span>
-        <LegendItem>
-          <LegendColor intensity={0} />
-        </LegendItem>
-        <LegendItem>
-          <LegendColor intensity={0.25} />
-        </LegendItem>
-        <LegendItem>
-          <LegendColor intensity={0.5} />
-        </LegendItem>
-        <LegendItem>
-          <LegendColor intensity={0.75} />
-        </LegendItem>
-        <LegendItem>
-          <LegendColor intensity={1} />
-        </LegendItem>
-        <span>More</span>
-      </LegendContainer>
-    </Container>
+                const dayReflections = getReflectionsForDate(habit.reflections, date);
+                const hasReflection = dayReflections.length > 0;
+                const dayLabel = date.toLocaleDateString('en-GB', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                });
+
+                return (
+                  <Tooltip key={`${weekIdx}-${dayIdx}`} label={dayLabel} position='top' withArrow>
+                    <DayCellWrapper>
+                      <DayCell
+                        intensity={shouldShow ? intensity : 0}
+                        style={{
+                          opacity: shouldShow ? 1 : 0.15,
+                          cursor: shouldShow && hasReflection ? 'pointer' : 'default',
+                        }}
+                        onClick={() => shouldShow && handleDayClick(date)}
+                      />
+                      {shouldShow && hasReflection && <ReflectionDot />}
+                    </DayCellWrapper>
+                  </Tooltip>
+                );
+              })}
+            </WeekColumn>
+          ))}
+        </CalendarWrapper>
+
+        <LegendContainer>
+          <span>Less</span>
+          <LegendItem>
+            <LegendColor intensity={0} />
+          </LegendItem>
+          <LegendItem>
+            <LegendColor intensity={0.25} />
+          </LegendItem>
+          <LegendItem>
+            <LegendColor intensity={0.5} />
+          </LegendItem>
+          <LegendItem>
+            <LegendColor intensity={0.75} />
+          </LegendItem>
+          <LegendItem>
+            <LegendColor intensity={1} />
+          </LegendItem>
+          <span>More</span>
+        </LegendContainer>
+      </Container>
+
+      {/* Reflection Modal */}
+      <Modal
+        opened={selectedDate !== null}
+        onClose={closeModal}
+        title={null}
+        centered
+        size='sm'
+        styles={{
+          content: {
+            background: '#f5f2ec',
+            border: '1px solid #ddd8ce',
+            borderRadius: 12,
+          },
+          body: { padding: '20px 24px' },
+          header: { display: 'none' },
+        }}
+      >
+        {selectedDate && (
+          <Stack gap={16}>
+            <div>
+              <ModalDate>
+                {selectedDate.toLocaleDateString('en-GB', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </ModalDate>
+              <ModalTitle>Reflections for this day</ModalTitle>
+            </div>
+
+            <Stack gap={10}>
+              {modalReflections.map((reflection, idx) => (
+                <ReflectionCard key={idx}>
+                  <ReasonText>{reflection.reason}</ReasonText>
+                  {reflection.suggestion && <SuggestionText>💡 {reflection.suggestion}</SuggestionText>}
+                </ReflectionCard>
+              ))}
+            </Stack>
+          </Stack>
+        )}
+      </Modal>
+    </>
   );
 };
 
@@ -236,17 +312,22 @@ const WeekColumn = styled.div`
   gap: 4px;
 `;
 
-const DayCell = styled.div<{ intensity: number }>`
+const DayCellWrapper = styled.div`
+  position: relative;
   width: 24px;
   height: 24px;
+`;
+
+const DayCell = styled.div<{ intensity: number }>`
+  width: 100%;
+  height: 100%;
   border-radius: 3px;
   background: ${(props) => {
-    // Neutral gradient from light to darker
-    if (props.intensity === 0) return '#f5f2ec'; // no activity
-    if (props.intensity < 0.25) return '#e8e5dd'; // very low
-    if (props.intensity < 0.5) return '#d4cec2'; // low
-    if (props.intensity < 0.75) return '#b5a48a'; // medium
-    return '#8a7d6f'; // high
+    if (props.intensity === 0) return '#f5f2ec';
+    if (props.intensity < 0.25) return '#e8e5dd';
+    if (props.intensity < 0.5) return '#d4cec2';
+    if (props.intensity < 0.75) return '#b5a48a';
+    return '#8a7d6f';
   }};
   border: 1px solid #ddd8ce;
   cursor: pointer;
@@ -256,6 +337,18 @@ const DayCell = styled.div<{ intensity: number }>`
     box-shadow: 0 2px 8px rgba(58, 53, 48, 0.1);
     border-color: #b5a48a;
   }
+`;
+
+const ReflectionDot = styled.div`
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b87d5c;
+  border: 1px solid #f5f2ec;
+  pointer-events: none;
 `;
 
 const LegendContainer = styled.div`
@@ -285,4 +378,38 @@ const LegendColor = styled.div<{ intensity: number }>`
     return '#8a7d6f';
   }};
   border: 1px solid #ddd8ce;
+`;
+
+const ModalDate = styled.div`
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9c9488;
+  margin-bottom: 4px;
+`;
+
+const ModalTitle = styled.div`
+  font-size: 16px;
+  font-weight: 500;
+  color: #3a3530;
+`;
+
+const ReflectionCard = styled.div`
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #faf8f4;
+  border: 1px solid #eae6de;
+`;
+
+const ReasonText = styled.div`
+  font-size: 12px;
+  color: #5a5248;
+  font-weight: 500;
+  margin-bottom: 4px;
+`;
+
+const SuggestionText = styled.div`
+  font-size: 11px;
+  color: #7a8278;
 `;

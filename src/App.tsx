@@ -1,21 +1,133 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { IconPlus, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
-import type { Habit, DataInsight } from '@/types';
+import type { Habit, DataInsight, DailyLog } from '@/types';
 import { Text } from '@mantine/core';
-import { initialHabits, sessionInsight, HII_META } from '@/const';
+import { useDisclosure } from '@mantine/hooks';
+import { initialHabits, sessionInsight } from '@/const';
 import { HabitDetail } from './components/habitDetail/HabitDetail';
+import { AddHabitModal, type NewHabitData } from './components/habits/AddHabitModal';
+import { getStatusColor, getTodayStatus, calculateMissedStreak } from './utils/habitMetrics';
+
+const STORAGE_KEY = 'user_habits';
+
+function loadHabits(): Habit[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return initialHabits;
+    return JSON.parse(stored);
+  } catch (error) {
+    console.error('Failed to load habits:', error);
+    return initialHabits;
+  }
+}
+
+function saveHabits(habits: Habit[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
+  } catch (error) {
+    console.error('Failed to save habits:', error);
+  }
+}
+
+function generateDailyLogs(
+  habitId: number,
+  days: number,
+  mode: 'Qualitative' | 'Quantitative',
+  goal?: number,
+): DailyLog[] {
+  const logs: DailyLog[] = [];
+  const today = new Date();
+  const consistencyTarget = 70; // 70% completion rate
+
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+
+    const dayOfWeek = date.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const adjustedTarget = isWeekend ? consistencyTarget * 0.7 : consistencyTarget;
+
+    const seed = (habitId * 31 + i * 7) % 1000;
+    const random = ((seed * 1103515245 + 12345) % 100) / 100;
+    const shouldComplete = random < adjustedTarget / 100;
+
+    if (mode === 'Qualitative') {
+      logs.push({
+        date: dateStr,
+        value: shouldComplete,
+        logged: true,
+      });
+    } else {
+      if (shouldComplete) {
+        const targetValue = goal || 25;
+        const value = Math.max(1, Math.floor(targetValue * (0.7 + random * 0.6)));
+        logs.push({
+          date: dateStr,
+          value,
+          logged: true,
+        });
+      } else {
+        logs.push({
+          date: dateStr,
+          value: 0,
+          logged: true,
+        });
+      }
+    }
+  }
+
+  return logs;
+}
 
 export const App: React.FC = () => {
-  const [habits, setHabits] = useState<Habit[]>(initialHabits);
-  const [selectedHabitId, setSelectedHabitId] = useState<number>(initialHabits[0].id);
+  const [habits, setHabits] = useState<Habit[]>(() => loadHabits());
+  const [selectedHabitId, setSelectedHabitId] = useState<number>(habits[0]?.id || 1);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [insight, setInsight] = useState<DataInsight | null>(sessionInsight);
+  const [addModalOpened, { open: openAddModal, close: closeAddModal }] = useDisclosure(false);
 
   const selectedHabit = habits.find((h) => h.id === selectedHabitId) ?? habits[0];
 
+  // Save to localStorage whenever habits change
+  useEffect(() => {
+    saveHabits(habits);
+  }, [habits]);
+
   const handleHabitChange = (id: number, val: boolean | number) => {
     setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, logged: val } : h)));
+  };
+
+  const handleAddHabit = (habitData: NewHabitData) => {
+    const newId = Math.max(...habits.map((h) => h.id), 0) + 1;
+
+    const dailyLogs: DailyLog[] = habitData.populateWithData
+      ? generateDailyLogs(newId, 90, habitData.mode, habitData.goal)
+      : [];
+
+    const todayValue = habitData.populateWithData
+      ? dailyLogs[dailyLogs.length - 1]?.value || (habitData.mode === 'Qualitative' ? false : 0)
+      : habitData.mode === 'Qualitative'
+      ? false
+      : 0;
+
+    const newHabit: Habit = {
+      id: newId,
+      name: habitData.name,
+      type: habitData.type,
+      mode: habitData.mode,
+      unit: habitData.unit,
+      goal: habitData.goal,
+      logged: todayValue,
+      hiiLevel: 'Emerging',
+      missedStreak: calculateMissedStreak(dailyLogs),
+      reflections: [],
+      dailyLogs,
+    };
+
+    setHabits((prev) => [...prev, newHabit]);
+    setSelectedHabitId(newId);
   };
 
   return (
@@ -32,21 +144,26 @@ export const App: React.FC = () => {
           </ToggleButton>
         </SidebarHeader>
         <SidebarHabits>
-          {habits.map((h) => (
-            <SidebarItem
-              key={h.id}
-              $isOpen={sidebarOpen}
-              $isActive={selectedHabitId === h.id}
-              onClick={() => setSelectedHabitId(h.id)}
-              title={h.name}
-            >
-              {sidebarOpen && <SidebarItemName>{h.name}</SidebarItemName>}
-              <SidebarItemDot style={{ background: HII_META[h.hiiLevel].color }} />
-            </SidebarItem>
-          ))}
+          {habits.map((h) => {
+            const status = getTodayStatus(h);
+            const statusColor = getStatusColor(status);
+
+            return (
+              <SidebarItem
+                key={h.id}
+                $isOpen={sidebarOpen}
+                $isActive={selectedHabitId === h.id}
+                onClick={() => setSelectedHabitId(h.id)}
+                title={`${h.name} - ${status}`}
+              >
+                {sidebarOpen && <SidebarItemName>{h.name}</SidebarItemName>}
+                <SidebarItemDot style={{ background: statusColor }} />
+              </SidebarItem>
+            );
+          })}
         </SidebarHabits>
         <div style={{ padding: '0 12px' }}>
-          <SidebarAddButton $isOpen={sidebarOpen}>
+          <SidebarAddButton $isOpen={sidebarOpen} onClick={openAddModal}>
             <IconPlus size={14} />
             {sidebarOpen && <span style={{ textWrap: 'nowrap' }}>Add habit</span>}
           </SidebarAddButton>
@@ -61,6 +178,8 @@ export const App: React.FC = () => {
           onInsightAcknowledge={() => setInsight(null)}
         />
       </MainContent>
+
+      <AddHabitModal opened={addModalOpened} onClose={closeAddModal} onSave={handleAddHabit} />
     </Shell>
   );
 };

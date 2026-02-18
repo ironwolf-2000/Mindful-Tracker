@@ -2,27 +2,16 @@ import React from 'react';
 import styled from 'styled-components';
 import { Stack, Progress, Tooltip } from '@mantine/core';
 import { IconInfoCircle } from '@tabler/icons-react';
-import type { HiiLevel, TimePeriod } from '@/types';
-import { HII_META } from '@/const';
+import type { TimePeriod } from '@/types';
 
 interface HIIExplainerProps {
-  habitName: string;
-  hiiLevel: HiiLevel;
   consistency: number; // 0-100: active days / total days
   recoveryLatency: number; // average days to resume after lapse
   stability: number; // 0-100: inverse of variability (higher = more stable)
   period: TimePeriod;
 }
 
-export const HIIExplainer: React.FC<HIIExplainerProps> = ({
-  habitName,
-  hiiLevel,
-  consistency,
-  recoveryLatency,
-  stability,
-  period,
-}) => {
-  const meta = HII_META[hiiLevel];
+export const HIIExplainer: React.FC<HIIExplainerProps> = ({ consistency, recoveryLatency, stability, period }) => {
   const periodLabel =
     period === 'week'
       ? 'this week'
@@ -32,51 +21,64 @@ export const HIIExplainer: React.FC<HIIExplainerProps> = ({
       ? 'this quarter'
       : 'this year';
 
+  // Calculate recovery as percentage for progress bar (inverse of latency)
+  const recoveryPercentage = Math.min(100, Math.max(0, (1 - recoveryLatency / 7) * 100));
+
   return (
     <Container>
-      <Title>Habit Internalization Index</Title>
-
-      <MainStatement>
-        <strong>{habitName}</strong> is becoming <strong>{meta.desc.toLowerCase()}</strong>.
-      </MainStatement>
+      <Title>Habit metrics</Title>
 
       <Stack gap={0}>
         <MetricRow>
           <MetricLabel>
             <Label>Consistency</Label>
-            <Tooltip label='Percentage of days you completed this habit' position='top' withArrow>
+            <Tooltip label={`Percentage of days you completed this habit ${periodLabel}`} position='top' withArrow>
               <InfoIcon />
             </Tooltip>
-            <Value>{Math.round(consistency)}%</Value>
+            <Value>{consistency}%</Value>
           </MetricLabel>
           <ProgressBar value={consistency} color='#4a7c6f' />
           <Description>
-            Active {Math.round(consistency)}% of days {periodLabel}
+            Active {consistency}% of days {periodLabel}
           </Description>
         </MetricRow>
 
         <MetricRow>
           <MetricLabel>
             <Label>Recovery speed</Label>
-            <Tooltip label='Average days to resume after you miss' position='top' withArrow>
+            <Tooltip label='Average days to resume after you miss. Lower is better.' position='top' withArrow>
               <InfoIcon />
             </Tooltip>
             <Value>{recoveryLatency.toFixed(1)} days</Value>
           </MetricLabel>
-          <ProgressBar value={Math.min(100, (1 - recoveryLatency / 7) * 100)} color='#3d5fa0' />
-          <Description>Resume faster = stronger habit</Description>
+          <ProgressBar value={recoveryPercentage} color='#3d5fa0' />
+          <Description>
+            {recoveryLatency === 0
+              ? 'No lapses this period'
+              : recoveryLatency < 2
+              ? 'Excellent recovery'
+              : recoveryLatency < 4
+              ? 'Good recovery'
+              : 'Room to improve'}
+          </Description>
         </MetricRow>
 
         <MetricRow>
           <MetricLabel>
             <Label>Stability</Label>
-            <Tooltip label='How consistent your weekly activity is' position='top' withArrow>
+            <Tooltip
+              label='How consistent your weekly activity is. Higher means fewer ups and downs.'
+              position='top'
+              withArrow
+            >
               <InfoIcon />
             </Tooltip>
-            <Value>{Math.round(stability)}%</Value>
+            <Value>{stability}%</Value>
           </MetricLabel>
           <ProgressBar value={stability} color='#7a8b99' />
-          <Description>Higher = fewer ups and downs</Description>
+          <Description>
+            {stability >= 80 ? 'Very stable routine' : stability >= 60 ? 'Moderately stable' : 'Building consistency'}
+          </Description>
         </MetricRow>
       </Stack>
     </Container>
@@ -97,15 +99,12 @@ const Title = styled.div`
   margin-bottom: 16px;
 `;
 
-const MainStatement = styled.div`
-  font-size: 14px;
-  color: #5a5248;
-  margin-bottom: 20px;
-  line-height: 1.5;
-`;
-
 const MetricRow = styled.div`
   margin-bottom: 20px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
 `;
 
 const MetricLabel = styled.div`

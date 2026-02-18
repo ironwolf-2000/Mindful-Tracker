@@ -1,14 +1,14 @@
 import React from 'react';
 import styled from 'styled-components';
 import { Group, Text, Stack } from '@mantine/core';
-import type { Reflection } from '@/types';
+import type { Reflection, TimePeriod } from '@/types';
+import { getDateRangeForPeriod } from '@/utils/habitMetrics';
 
 interface RecurringBarriersProps {
   reflections: Reflection[];
+  period: TimePeriod;
   minOccurrences?: number;
 }
-
-// ─── Styled Components ────────────────────────────────────────────────────────
 
 const Container = styled.div`
   padding: 24px 32px;
@@ -51,9 +51,17 @@ const EmptyState = styled(Text)`
   line-height: 1.5;
 `;
 
-// ─── Helper function ────────────────────────────────────────────────────────
+function filterReflectionsByPeriod(reflections: Reflection[], period: TimePeriod): Reflection[] {
+  const { start, end } = getDateRangeForPeriod(period);
 
-function groupReflections(reflections: Reflection[], minCount: number = 3): Array<[string, number]> {
+  return reflections.filter((reflection) => {
+    const reflectionDate = new Date(reflection.date);
+    reflectionDate.setHours(0, 0, 0, 0);
+    return reflectionDate >= start && reflectionDate <= end;
+  });
+}
+
+function groupReflections(reflections: Reflection[], minCount: number = 2): Array<[string, number]> {
   const counts: Record<string, number> = {};
 
   for (const r of reflections) {
@@ -65,23 +73,36 @@ function groupReflections(reflections: Reflection[], minCount: number = 3): Arra
     .sort((a, b) => b[1] - a[1]);
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+export const RecurringBarriers: React.FC<RecurringBarriersProps> = ({ reflections, period, minOccurrences = 2 }) => {
+  // Filter reflections to current period
+  const periodReflections = filterReflectionsByPeriod(reflections, period);
+  const grouped = groupReflections(periodReflections, minOccurrences);
 
-export const RecurringBarriers: React.FC<RecurringBarriersProps> = ({ reflections, minOccurrences = 3 }) => {
-  const grouped = groupReflections(reflections, minOccurrences);
+  const periodLabel =
+    period === 'week'
+      ? 'this week'
+      : period === 'month'
+      ? 'this month'
+      : period === 'quarter'
+      ? 'this quarter'
+      : 'this year';
 
   if (grouped.length === 0) {
     return (
       <Container>
-        <Title>Recurring barriers</Title>
-        <EmptyState>Patterns will emerge after you log a few reflections.</EmptyState>
+        <Title>Recurring barriers {periodLabel}</Title>
+        <EmptyState>
+          {periodReflections.length === 0
+            ? `No reflections ${periodLabel}.`
+            : 'No recurring patterns yet. Keep reflecting to identify barriers.'}
+        </EmptyState>
       </Container>
     );
   }
 
   return (
     <Container>
-      <Title>Recurring barriers</Title>
+      <Title>Recurring barriers {periodLabel}</Title>
       <Stack gap={4}>
         {grouped.map(([reason, count]) => (
           <BarrierRow key={reason} gap={8}>

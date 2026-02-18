@@ -1,13 +1,113 @@
 import { IconClockHour4, IconBolt, IconMoodSad, IconWind, IconDots } from '@tabler/icons-react';
-import type { DataInsight, Habit, HiiLevel, Reflection } from './types';
+import type { DataInsight, Habit, HiiLevel, DailyLog, Reflection } from './types';
+import { calculateMissedStreak } from './utils/habitMetrics';
 
-export const mockReflections: Reflection[] = [
-  { date: '2025-01-14', reason: 'Low energy', suggestion: 'Sleep earlier' },
-  { date: '2025-01-21', reason: 'Time constraint', suggestion: 'Morning session' },
-  { date: '2025-02-03', reason: 'Low energy', suggestion: 'Shorter route' },
-  { date: '2025-02-10', reason: 'Environmental trigger', suggestion: 'Indoor alternative' },
-  { date: '2025-02-17', reason: 'Low energy', suggestion: 'Rest day' },
-];
+// Helper to generate daily logs for past N days
+function generateDailyLogs(
+  habitId: number,
+  days: number,
+  mode: 'Qualitative' | 'Quantitative',
+  consistencyTarget: number, // 0-100: how often should they complete it
+): DailyLog[] {
+  const logs: DailyLog[] = [];
+  const today = new Date();
+
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+
+    // Determine if this day should be completed based on consistency target
+    const dayOfWeek = date.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    // Slightly lower completion on weekends
+    const adjustedTarget = isWeekend ? consistencyTarget * 0.7 : consistencyTarget;
+
+    // Add some randomness but trend toward target
+    const seed = (habitId * 31 + i * 7) % 1000;
+    const random = ((seed * 1103515245 + 12345) % 100) / 100;
+    const shouldComplete = random < adjustedTarget / 100;
+
+    if (mode === 'Qualitative') {
+      logs.push({
+        date: dateStr,
+        value: shouldComplete,
+        logged: true,
+      });
+    } else {
+      // For quantitative, generate a realistic value
+      if (shouldComplete) {
+        // Generate value based on habit type
+        let value: number;
+        if (habitId === 1) {
+          // Running: 3-8 km
+          value = 3 + Math.floor(random * 6);
+        } else if (habitId === 2) {
+          // Reading: 10-40 pages
+          value = 10 + Math.floor(random * 31);
+        } else {
+          // Generic
+          value = Math.floor(random * 50);
+        }
+        logs.push({
+          date: dateStr,
+          value,
+          logged: true,
+        });
+      } else {
+        logs.push({
+          date: dateStr,
+          value: 0,
+          logged: true,
+        });
+      }
+    }
+  }
+
+  return logs;
+}
+
+// Generate reflections for missed days with patterns
+function generateReflections(logs: DailyLog[], habitId: number): Reflection[] {
+  const reflections: Reflection[] = [];
+  const reasons = ['Time constraint', 'Low energy', 'Emotional state', 'Environmental trigger'];
+  const suggestions = [
+    'Earlier scheduling',
+    'Shorter session',
+    'Find an alternative',
+    'Remove the trigger',
+    'Rest and retry',
+  ];
+
+  // Find missed days
+  const missedDays = logs.filter((log) => {
+    if (typeof log.value === 'boolean') return !log.value;
+    return log.value === 0;
+  });
+
+  // Add reflections for some missed days (not all)
+  const reflectionCount = Math.min(5, Math.floor(missedDays.length * 0.3));
+
+  for (let i = 0; i < reflectionCount; i++) {
+    const missedDay = missedDays[Math.floor(Math.random() * missedDays.length)];
+    const reasonIdx = (habitId * i) % reasons.length;
+    const suggestionIdx = (habitId * i + 1) % suggestions.length;
+
+    reflections.push({
+      date: missedDay.date,
+      reason: reasons[reasonIdx],
+      suggestion: suggestions[suggestionIdx],
+    });
+  }
+
+  return reflections.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Generate mock habits with 90 days of data
+const runningLogs = generateDailyLogs(1, 90, 'Quantitative', 75); // 75% consistency
+const readingLogs = generateDailyLogs(2, 90, 'Quantitative', 85); // 85% consistency
+const meditationLogs = generateDailyLogs(3, 90, 'Qualitative', 60); // 60% consistency
 
 export const initialHabits: Habit[] = [
   {
@@ -16,10 +116,12 @@ export const initialHabits: Habit[] = [
     type: 'Start',
     mode: 'Quantitative',
     unit: 'km',
-    logged: 0,
+    goal: 5, // NEW: 5km per day goal
+    logged: runningLogs[runningLogs.length - 1]?.value || 0,
     hiiLevel: 'Stable',
-    missedStreak: 0,
-    reflections: mockReflections,
+    missedStreak: calculateMissedStreak(runningLogs),
+    dailyLogs: runningLogs,
+    reflections: generateReflections(runningLogs, 1),
   },
   {
     id: 2,
@@ -27,13 +129,12 @@ export const initialHabits: Habit[] = [
     type: 'Start',
     mode: 'Quantitative',
     unit: 'pages',
-    logged: 12,
+    goal: 25, // NEW: 25 pages per day goal
+    logged: readingLogs[readingLogs.length - 1]?.value || 0,
     hiiLevel: 'Internalized',
-    missedStreak: 0,
-    reflections: [
-      { date: '2025-01-08', reason: 'Emotional state', suggestion: 'Light reading' },
-      { date: '2025-01-22', reason: 'Emotional state', suggestion: 'Short chapter only' },
-    ],
+    missedStreak: calculateMissedStreak(readingLogs),
+    dailyLogs: readingLogs,
+    reflections: generateReflections(readingLogs, 2),
   },
   {
     id: 3,
@@ -41,28 +142,12 @@ export const initialHabits: Habit[] = [
     type: 'Start',
     mode: 'Qualitative',
     unit: undefined,
-    logged: false,
+    goal: undefined, // Qualitative habits don't need numeric goals
+    logged: (meditationLogs[meditationLogs.length - 1]?.value as boolean) || false,
     hiiLevel: 'Emerging',
-    missedStreak: 2,
-    reflections: [
-      { date: '2025-02-01', reason: 'Low energy', suggestion: 'Morning session' },
-      { date: '2025-02-08', reason: 'Time constraint', suggestion: 'Shorter session' },
-    ],
-  },
-  {
-    id: 4,
-    name: 'Social media',
-    type: 'Stop',
-    mode: 'Quantitative',
-    unit: 'min',
-    logged: 47,
-    hiiLevel: 'Emerging',
-    missedStreak: 0,
-    reflections: [
-      { date: '2025-01-16', reason: 'Emotional state', suggestion: 'Walk instead' },
-      { date: '2025-01-30', reason: 'Environmental trigger', suggestion: 'App timer' },
-      { date: '2025-02-08', reason: 'Emotional state', suggestion: 'Journaling' },
-    ],
+    missedStreak: calculateMissedStreak(meditationLogs),
+    dailyLogs: meditationLogs,
+    reflections: generateReflections(meditationLogs, 3),
   },
 ];
 

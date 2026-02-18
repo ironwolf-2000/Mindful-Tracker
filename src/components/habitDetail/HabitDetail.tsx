@@ -5,12 +5,13 @@ import type { Habit, DataInsight, Reflection, TimePeriod } from '@/types';
 import { HabitDetailHeader } from './HabitDetailHeader';
 import { HIIExplainer } from './HIIExplainer';
 import { RecurringBarriers } from './RecurringBarriers';
-import { ReflectionHistory } from './ReflectionHistory';
+// import { ReflectionHistory } from './ReflectionHistory';
 import { DataTriggeredInsight } from '../shared/DataTriggeredInsight';
 import { ReflectionModal } from '../reflection/ReflectionModal';
 import { HeatmapCalendar } from '../visualization/HeatmapCalendar';
 import { RollingTrendChart } from '../visualization/RollingTrendChart';
 import { useDisclosure } from '@mantine/hooks';
+import { calculateConsistency, calculateRecoveryLatency, calculateStability } from '@/utils/habitMetrics';
 
 interface HabitDetailProps {
   habit: Habit;
@@ -19,23 +20,6 @@ interface HabitDetailProps {
   onInsightAcknowledge: () => void;
   onPeriodChange?: (period: TimePeriod) => void;
 }
-
-const DetailContainer = styled.div`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  background: #f5f2ec;
-`;
-
-const ScrollContent = styled(Stack)`
-  padding-bottom: 40px;
-`;
-
-const InsightWrapper = styled.div`
-  padding: 20px 32px;
-  border-bottom: 1px solid #ddd8ce;
-`;
 
 const STORAGE_KEY = 'habit_reflections';
 
@@ -67,24 +51,17 @@ function saveReflection(habitId: number, reflection: Reflection): void {
   }
 }
 
-function getMockHIIData(period: TimePeriod) {
-  const baseData = {
-    recoveryLatency: 2.3,
-  };
+function calculateHIIScore(consistency: number, recoveryLatency: number, stability: number): number {
+  // Weights based on research importance:
+  // Consistency: 50% - Most important for habit formation
+  // Recovery: 30% - Critical for resilience
+  // Stability: 20% - Shows automaticity
 
-  if (period === 'week') {
-    return { ...baseData, consistency: 71, stability: 82 };
-  }
+  const consistencyScore = consistency * 0.5;
+  const recoveryScore = Math.max(0, (1 - recoveryLatency / 7) * 100) * 0.3;
+  const stabilityScore = stability * 0.2;
 
-  if (period === 'month') {
-    return { ...baseData, consistency: 68, stability: 75 };
-  }
-
-  if (period === 'quarter') {
-    return { ...baseData, consistency: 65, stability: 68 };
-  }
-
-  return { ...baseData, consistency: 64, stability: 65 };
+  return Math.round(consistencyScore + recoveryScore + stabilityScore);
 }
 
 export const HabitDetail: React.FC<HabitDetailProps> = ({
@@ -101,7 +78,11 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
   const [reflectionSaved, setReflectionSaved] = useState(false);
   const [reflections, setReflections] = useState<Reflection[]>([]);
 
-  const hiiData = getMockHIIData(selectedPeriod);
+  // Calculate real metrics from daily logs
+  const consistency = calculateConsistency(habit.dailyLogs, selectedPeriod);
+  const recoveryLatency = calculateRecoveryLatency(habit.dailyLogs, selectedPeriod);
+  const stability = calculateStability(habit.dailyLogs, selectedPeriod);
+  const hiiScore = calculateHIIScore(consistency, recoveryLatency, stability);
 
   // Load reflections from localStorage
   useEffect(() => {
@@ -136,7 +117,7 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
       setReflectionReason('');
       setReflectionSuggestion('');
       setReflectionSaved(false);
-    }, 2500); // Increased from 1200ms to 2500ms
+    }, 2500);
   };
 
   const handleOpenReflection = () => {
@@ -157,6 +138,8 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
         onPeriodChange={handlePeriodChange}
         loggingValue={habit.logged}
         onLoggingChange={(val) => onHabitChange(habit.id, val)}
+        hiiScore={hiiScore}
+        onOpenReflection={handleOpenReflection}
       />
 
       <ScrollContent gap={0}>
@@ -167,11 +150,9 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
         )}
 
         <HIIExplainer
-          habitName={habit.name}
-          hiiLevel={habit.hiiLevel}
-          consistency={hiiData.consistency}
-          recoveryLatency={hiiData.recoveryLatency}
-          stability={hiiData.stability}
+          consistency={consistency}
+          recoveryLatency={recoveryLatency}
+          stability={stability}
           period={selectedPeriod}
         />
 
@@ -179,12 +160,12 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
 
         <RollingTrendChart habit={habit} period={selectedPeriod} />
 
-        <RecurringBarriers reflections={allReflections} />
+        <RecurringBarriers reflections={allReflections} period={selectedPeriod} />
 
-        <ReflectionHistory
+        {/* <ReflectionHistory
           habit={{ ...habit, reflections: allReflections }}
           onOpenReflectionModal={handleOpenReflection}
-        />
+        /> */}
       </ScrollContent>
 
       <ReflectionModal
@@ -203,3 +184,20 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
     </DetailContainer>
   );
 };
+
+const DetailContainer = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: #f5f2ec;
+`;
+
+const ScrollContent = styled(Stack)`
+  padding-bottom: 40px;
+`;
+
+const InsightWrapper = styled.div`
+  padding: 20px 32px;
+  border-bottom: 1px solid #ddd8ce;
+`;

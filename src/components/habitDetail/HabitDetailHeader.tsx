@@ -1,8 +1,9 @@
 import React from 'react';
 import styled from 'styled-components';
-import { Checkbox, NumberInput, Text, Tooltip } from '@mantine/core';
+import { Button, Checkbox, NumberInput, Text, Tooltip } from '@mantine/core';
 import type { Habit, TimePeriod } from '@/types';
 import { HII_META } from '@/const';
+import { IconSparkles } from '@tabler/icons-react';
 
 interface HabitDetailHeaderProps {
   habit: Habit;
@@ -10,6 +11,8 @@ interface HabitDetailHeaderProps {
   onPeriodChange: (period: TimePeriod) => void;
   loggingValue: boolean | number;
   onLoggingChange: (val: boolean | number) => void;
+  hiiScore: number; // 0-100
+  onOpenReflection?: () => void;
 }
 
 function getHabitTypeLabel(type: 'Start' | 'Stop', mode: 'Qualitative' | 'Quantitative'): string {
@@ -30,10 +33,18 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
   onPeriodChange,
   loggingValue,
   onLoggingChange,
+  hiiScore,
+  onOpenReflection, // NEW
 }) => {
   const typeLabel = getHabitTypeLabel(habit.type, habit.mode);
   const typeColor = getHabitTypeColor(habit.type);
   const hiiMeta = HII_META[habit.hiiLevel];
+  const hasPatternAlert = habit.missedStreak >= 2;
+  const showGoal = habit.mode === 'Quantitative' && habit.goal;
+
+  const getHiiTooltip = () => {
+    return `${hiiMeta.desc}. Your habit is ${hiiScore}/100 internalized.`;
+  };
 
   return (
     <>
@@ -41,8 +52,12 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
         <LeftSection>
           <TitleRow>
             <HabitName>{habit.name}</HabitName>
-            <Tooltip label={hiiMeta.desc} position='top' withArrow>
-              <HiiBadge style={{ background: hiiMeta.bg, color: hiiMeta.color }}>{habit.hiiLevel}</HiiBadge>
+            <Tooltip label={getHiiTooltip()} position='top' withArrow multiline maw={220}>
+              <HiiBadge style={{ background: hiiMeta.bg, color: hiiMeta.color }}>
+                <BadgeLabel>{habit.hiiLevel}</BadgeLabel>
+                <BadgeDivider />
+                <BadgeScore>{hiiScore}</BadgeScore>
+              </HiiBadge>
             </Tooltip>
           </TitleRow>
           <TypeBadge style={{ color: typeColor }}>{typeLabel}</TypeBadge>
@@ -103,7 +118,12 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
                   },
                 }}
               />
-              {habit.unit && (
+              {showGoal && (
+                <GoalLabel>
+                  / {habit.goal} {habit.unit}
+                </GoalLabel>
+              )}
+              {!showGoal && habit.unit && (
                 <Text size='sm' c='dimmed' style={{ whiteSpace: 'nowrap' }}>
                   {habit.unit}
                 </Text>
@@ -112,6 +132,34 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
           )}
         </InputSection>
       </LoggingBar>
+
+      {hasPatternAlert && onOpenReflection && (
+        <PatternAlert>
+          <AlertContent>
+            <AlertIcon>🔍</AlertIcon>
+            <AlertText>
+              You've missed <strong>{habit.name.toLowerCase()}</strong> for {habit.missedStreak} days in a row.
+            </AlertText>
+          </AlertContent>
+          <Button
+            size='xs'
+            onClick={onOpenReflection}
+            style={{
+              background: '#7a6e60',
+              color: '#f5f2ec',
+              fontSize: 11,
+              height: 28,
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            leftSection={<IconSparkles size={12} />}
+          >
+            Reflect
+          </Button>
+        </PatternAlert>
+      )}
     </>
   );
 };
@@ -147,13 +195,30 @@ const HabitName = styled.h1`
 const HiiBadge = styled.div`
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 4px;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: default;
+`;
+
+const BadgeLabel = styled.span`
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  cursor: default;
+`;
+
+const BadgeDivider = styled.div`
+  width: 1px;
+  height: 14px;
+  background: currentColor;
+  opacity: 0.3;
+`;
+
+const BadgeScore = styled.span`
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 `;
 
 const TypeBadge = styled.span`
@@ -216,4 +281,43 @@ const InputSection = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+`;
+
+const PatternAlert = styled.div`
+  padding: 12px 32px;
+  background: #f0ebe0;
+  border-bottom: 1px solid #ddd8ce;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+`;
+
+const AlertContent = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+`;
+
+const AlertIcon = styled.span`
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+`;
+
+const AlertText = styled.div`
+  font-size: 12px;
+  color: #6b5e4a;
+  line-height: 1.4;
+
+  strong {
+    font-weight: 600;
+  }
+`;
+
+const GoalLabel = styled.span`
+  font-size: 11px;
+  color: #9c9488;
+  white-space: nowrap;
 `;
