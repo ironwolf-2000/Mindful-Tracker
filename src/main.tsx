@@ -2,8 +2,9 @@ import { createRoot } from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { createGlobalStyle } from 'styled-components';
-import '@mantine/core/styles.css';
+import { Analytics } from '@vercel/analytics/react';
 import { App } from './App';
+import '@mantine/core/styles.css';
 
 const GlobalStyle = createGlobalStyle`
   *,
@@ -40,6 +41,7 @@ createRoot(document.getElementById('root')!).render(
     <ModalsProvider>
       <App />
       <GlobalStyle />
+      <Analytics />
     </ModalsProvider>
   </MantineProvider>,
 );
