@@ -185,6 +185,7 @@ const Header = styled.div`
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  column-gap: 20px;
 `;
 
 const LeftSection = styled.div`

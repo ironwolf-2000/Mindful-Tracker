@@ -11,7 +11,7 @@ import { type EditHabitData } from './components/habits/EditHabitModal';
 import { getStatusColor, getTodayStatus, calculateMissedStreak } from './utils/habitMetrics';
 
 const STORAGE_KEY = 'user_habits';
-const PROTOTYPE_HABIT_IDS = [1, 2, 3]; // IDs of initial prototype habits
+const PROTOTYPE_HABIT_IDS = [1, 2, 3];
 
 function loadHabits(): Habit[] {
   try {
@@ -97,7 +97,45 @@ export const App: React.FC = () => {
   }, [habits]);
 
   const handleHabitChange = (id: number, val: boolean | number) => {
-    setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, logged: val } : h)));
+    setHabits((prev) =>
+      prev.map((h) => {
+        if (h.id !== id) return h;
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Update or create today's log
+        const updatedLogs = [...h.dailyLogs];
+        const todayLogIndex = updatedLogs.findIndex((log) => log.date === today);
+
+        if (todayLogIndex >= 0) {
+          // Update existing log
+          updatedLogs[todayLogIndex] = {
+            ...updatedLogs[todayLogIndex],
+            value: val,
+            logged: true,
+          };
+        } else {
+          // Create new log for today
+          updatedLogs.push({
+            date: today,
+            value: val,
+            logged: true,
+          });
+          // Sort by date
+          updatedLogs.sort((a, b) => a.date.localeCompare(b.date));
+        }
+
+        // Recalculate missed streak
+        const newMissedStreak = calculateMissedStreak(updatedLogs);
+
+        return {
+          ...h,
+          logged: val,
+          dailyLogs: updatedLogs,
+          missedStreak: newMissedStreak,
+        };
+      }),
+    );
   };
 
   const handleAddHabit = (habitData: NewHabitData) => {
@@ -149,7 +187,6 @@ export const App: React.FC = () => {
   const handleDeleteHabit = (habitId: number) => {
     setHabits((prev) => prev.filter((h) => h.id !== habitId));
 
-    // Select first remaining habit
     const remainingHabits = habits.filter((h) => h.id !== habitId);
     if (remainingHabits.length > 0) {
       setSelectedHabitId(remainingHabits[0].id);

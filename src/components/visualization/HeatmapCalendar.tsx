@@ -303,7 +303,7 @@ const CalendarWrapper = styled.div`
   display: flex;
   gap: 4px;
   overflow-x: auto;
-  padding-bottom: 8px;
+  padding: 2px 0 8px;
 `;
 
 const WeekColumn = styled.div`
