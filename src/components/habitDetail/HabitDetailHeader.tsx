@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { Button, Checkbox, NumberInput, Text, Tooltip } from '@mantine/core';
 import type { Habit, TimePeriod } from '@/types';
 import { HII_META } from '@/const';
-import { IconSparkles } from '@tabler/icons-react';
+import { IconSparkles, IconEdit } from '@tabler/icons-react';
 
 interface HabitDetailHeaderProps {
   habit: Habit;
@@ -11,8 +11,10 @@ interface HabitDetailHeaderProps {
   onPeriodChange: (period: TimePeriod) => void;
   loggingValue: boolean | number;
   onLoggingChange: (val: boolean | number) => void;
-  hiiScore: number; // 0-100
+  hiiScore: number;
   onOpenReflection?: () => void;
+  onOpenEdit?: () => void;
+  isPrototypeHabit?: boolean;
 }
 
 function getHabitTypeLabel(type: 'Start' | 'Stop', mode: 'Qualitative' | 'Quantitative'): string {
@@ -34,7 +36,9 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
   loggingValue,
   onLoggingChange,
   hiiScore,
-  onOpenReflection, // NEW
+  onOpenReflection,
+  onOpenEdit,
+  isPrototypeHabit = false,
 }) => {
   const typeLabel = getHabitTypeLabel(habit.type, habit.mode);
   const typeColor = getHabitTypeColor(habit.type);
@@ -59,6 +63,17 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
                 <BadgeScore>{hiiScore}</BadgeScore>
               </HiiBadge>
             </Tooltip>
+            {onOpenEdit && (
+              <Tooltip
+                label={isPrototypeHabit ? 'Prototype habits cannot be edited' : 'Edit habit'}
+                position='top'
+                withArrow
+              >
+                <EditButton onClick={onOpenEdit} disabled={isPrototypeHabit}>
+                  <IconEdit size={16} />
+                </EditButton>
+              </Tooltip>
+            )}
           </TitleRow>
           <TypeBadge style={{ color: typeColor }}>{typeLabel}</TypeBadge>
         </LeftSection>
@@ -320,4 +335,24 @@ const GoalLabel = styled.span`
   font-size: 11px;
   color: #9c9488;
   white-space: nowrap;
+`;
+
+const EditButton = styled.button<{ disabled?: boolean }>`
+  width: 28px;
+  height: 28px;
+  border: 1px solid ${(props) => (props.disabled ? '#e0dcd4' : '#ddd8ce')};
+  background: transparent;
+  color: ${(props) => (props.disabled ? '#c8c0b4' : '#9c9488')};
+  border-radius: 5px;
+  cursor: ${(props) => (props.disabled ? 'not-allowed' : 'pointer')};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+
+  &:hover {
+    background: ${(props) => (props.disabled ? 'transparent' : '#faf8f4')};
+    border-color: ${(props) => (props.disabled ? '#e0dcd4' : '#b5a48a')};
+    color: ${(props) => (props.disabled ? '#c8c0b4' : '#5a5248')};
+  }
 `;

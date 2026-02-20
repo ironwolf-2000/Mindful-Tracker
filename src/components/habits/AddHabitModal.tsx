@@ -146,6 +146,7 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ opened, onClose, o
           label='Habit name'
           placeholder='e.g., Morning run, Read before bed'
           value={name}
+          maxLength={32}
           onChange={(e) => setName(e.currentTarget.value)}
           styles={{
             label: {

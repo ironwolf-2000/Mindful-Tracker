@@ -5,9 +5,10 @@ import type { Habit, DataInsight, Reflection, TimePeriod } from '@/types';
 import { HabitDetailHeader } from './HabitDetailHeader';
 import { HIIExplainer } from './HIIExplainer';
 import { RecurringBarriers } from './RecurringBarriers';
-// import { ReflectionHistory } from './ReflectionHistory';
 import { DataTriggeredInsight } from '../shared/DataTriggeredInsight';
 import { ReflectionModal } from '../reflection/ReflectionModal';
+import { EditHabitModal, type EditHabitData } from '../habits/EditHabitModal';
+import { HabitDangerZone } from '../habits/HabitDangerZone';
 import { HeatmapCalendar } from '../visualization/HeatmapCalendar';
 import { RollingTrendChart } from '../visualization/RollingTrendChart';
 import { useDisclosure } from '@mantine/hooks';
@@ -19,6 +20,9 @@ interface HabitDetailProps {
   sessionInsight: DataInsight | null;
   onInsightAcknowledge: () => void;
   onPeriodChange?: (period: TimePeriod) => void;
+  onEditHabit: (habitId: number, updates: EditHabitData) => void;
+  onDeleteHabit: (habitId: number) => void;
+  isPrototypeHabit: boolean;
 }
 
 const STORAGE_KEY = 'habit_reflections';
@@ -52,11 +56,6 @@ function saveReflection(habitId: number, reflection: Reflection): void {
 }
 
 function calculateHIIScore(consistency: number, recoveryLatency: number, stability: number): number {
-  // Weights based on research importance:
-  // Consistency: 50% - Most important for habit formation
-  // Recovery: 30% - Critical for resilience
-  // Stability: 20% - Shows automaticity
-
   const consistencyScore = consistency * 0.5;
   const recoveryScore = Math.max(0, (1 - recoveryLatency / 7) * 100) * 0.3;
   const stabilityScore = stability * 0.2;
@@ -70,27 +69,28 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
   sessionInsight,
   onInsightAcknowledge,
   onPeriodChange,
+  onEditHabit,
+  onDeleteHabit,
+  isPrototypeHabit,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('week');
   const [reflectionOpened, { open: openReflection, close: closeReflection }] = useDisclosure(false);
+  const [editModalOpened, { open: openEditModal, close: closeEditModal }] = useDisclosure(false);
   const [reflectionReason, setReflectionReason] = useState<string>('');
   const [reflectionSuggestion, setReflectionSuggestion] = useState<string>('');
   const [reflectionSaved, setReflectionSaved] = useState(false);
   const [reflections, setReflections] = useState<Reflection[]>([]);
 
-  // Calculate real metrics from daily logs
   const consistency = calculateConsistency(habit.dailyLogs, selectedPeriod);
   const recoveryLatency = calculateRecoveryLatency(habit.dailyLogs, selectedPeriod);
   const stability = calculateStability(habit.dailyLogs, selectedPeriod);
   const hiiScore = calculateHIIScore(consistency, recoveryLatency, stability);
 
-  // Load reflections from localStorage
   useEffect(() => {
     const loaded = loadReflections(habit.id);
     queueMicrotask(() => setReflections(loaded));
   }, [habit.id]);
 
-  // Notify parent when period changes
   const handlePeriodChange = (period: TimePeriod) => {
     setSelectedPeriod(period);
     onPeriodChange?.(period);
@@ -105,10 +105,7 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
       suggestion: reflectionSuggestion,
     };
 
-    // Save to localStorage
     saveReflection(habit.id, newReflection);
-
-    // Update local state
     setReflections((prev) => [...prev, newReflection]);
 
     setReflectionSaved(true);
@@ -127,7 +124,6 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
     openReflection();
   };
 
-  // Merge stored reflections with habit reflections
   const allReflections = [...habit.reflections, ...reflections];
 
   return (
@@ -140,9 +136,11 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
         onLoggingChange={(val) => onHabitChange(habit.id, val)}
         hiiScore={hiiScore}
         onOpenReflection={handleOpenReflection}
+        onOpenEdit={openEditModal}
+        isPrototypeHabit={isPrototypeHabit}
       />
 
-      <ScrollContent gap={0}>
+      <Stack gap={0}>
         {sessionInsight && (
           <InsightWrapper>
             <DataTriggeredInsight insight={sessionInsight} onAcknowledge={onInsightAcknowledge} />
@@ -162,11 +160,12 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
 
         <RecurringBarriers reflections={allReflections} period={selectedPeriod} />
 
-        {/* <ReflectionHistory
-          habit={{ ...habit, reflections: allReflections }}
-          onOpenReflectionModal={handleOpenReflection}
-        /> */}
-      </ScrollContent>
+        <HabitDangerZone
+          habitName={habit.name}
+          onDelete={() => onDeleteHabit(habit.id)}
+          isPrototypeHabit={isPrototypeHabit}
+        />
+      </Stack>
 
       <ReflectionModal
         opened={reflectionOpened}
@@ -181,6 +180,8 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
         isSaved={reflectionSaved}
         isDisabled={!reflectionReason}
       />
+
+      <EditHabitModal opened={editModalOpened} onClose={closeEditModal} habit={habit} onSave={onEditHabit} />
     </DetailContainer>
   );
 };
@@ -191,10 +192,6 @@ const DetailContainer = styled.div`
   flex-direction: column;
   overflow-y: auto;
   background: #f5f2ec;
-`;
-
-const ScrollContent = styled(Stack)`
-  padding-bottom: 40px;
 `;
 
 const InsightWrapper = styled.div`

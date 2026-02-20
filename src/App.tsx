@@ -7,9 +7,11 @@ import { useDisclosure } from '@mantine/hooks';
 import { initialHabits, sessionInsight } from '@/const';
 import { HabitDetail } from './components/habitDetail/HabitDetail';
 import { AddHabitModal, type NewHabitData } from './components/habits/AddHabitModal';
+import { type EditHabitData } from './components/habits/EditHabitModal';
 import { getStatusColor, getTodayStatus, calculateMissedStreak } from './utils/habitMetrics';
 
 const STORAGE_KEY = 'user_habits';
+const PROTOTYPE_HABIT_IDS = [1, 2, 3]; // IDs of initial prototype habits
 
 function loadHabits(): Habit[] {
   try {
@@ -38,7 +40,7 @@ function generateDailyLogs(
 ): DailyLog[] {
   const logs: DailyLog[] = [];
   const today = new Date();
-  const consistencyTarget = 70; // 70% completion rate
+  const consistencyTarget = 70;
 
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(today);
@@ -90,7 +92,6 @@ export const App: React.FC = () => {
 
   const selectedHabit = habits.find((h) => h.id === selectedHabitId) ?? habits[0];
 
-  // Save to localStorage whenever habits change
   useEffect(() => {
     saveHabits(habits);
   }, [habits]);
@@ -128,6 +129,31 @@ export const App: React.FC = () => {
 
     setHabits((prev) => [...prev, newHabit]);
     setSelectedHabitId(newId);
+  };
+
+  const handleEditHabit = (habitId: number, updates: EditHabitData) => {
+    setHabits((prev) =>
+      prev.map((h) =>
+        h.id === habitId
+          ? {
+              ...h,
+              name: updates.name,
+              unit: updates.unit,
+              goal: updates.goal,
+            }
+          : h,
+      ),
+    );
+  };
+
+  const handleDeleteHabit = (habitId: number) => {
+    setHabits((prev) => prev.filter((h) => h.id !== habitId));
+
+    // Select first remaining habit
+    const remainingHabits = habits.filter((h) => h.id !== habitId);
+    if (remainingHabits.length > 0) {
+      setSelectedHabitId(remainingHabits[0].id);
+    }
   };
 
   return (
@@ -176,6 +202,9 @@ export const App: React.FC = () => {
           onHabitChange={handleHabitChange}
           sessionInsight={insight?.habitId === selectedHabitId ? insight : null}
           onInsightAcknowledge={() => setInsight(null)}
+          onEditHabit={handleEditHabit}
+          onDeleteHabit={handleDeleteHabit}
+          isPrototypeHabit={PROTOTYPE_HABIT_IDS.includes(selectedHabit.id)}
         />
       </MainContent>
 
