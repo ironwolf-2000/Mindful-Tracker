@@ -235,6 +235,7 @@ export const App: React.FC = () => {
 
       <MainContent>
         <HabitDetail
+          key={selectedHabit.id}
           habit={selectedHabit}
           onHabitChange={handleHabitChange}
           sessionInsight={insight?.habitId === selectedHabitId ? insight : null}
