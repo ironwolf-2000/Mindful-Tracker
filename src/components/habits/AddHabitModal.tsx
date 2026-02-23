@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Modal, TextInput, NumberInput, Switch, Tooltip } from '@mantine/core';
-import { IconCheck, IconTrendingUp, IconInfoCircle } from '@tabler/icons-react';
+import { Modal, TextInput, NumberInput, Switch, Tooltip, Box } from '@mantine/core';
+import { IconCheck, IconTrendingUp, IconInfoCircle, IconTrendingDown } from '@tabler/icons-react';
 import type { HabitType, TrackingMode } from '@/types';
 
 interface AddHabitModalProps {
@@ -49,7 +49,7 @@ const HABIT_TYPES = [
   {
     type: 'Stop' as HabitType,
     mode: 'Quantitative' as TrackingMode,
-    icon: <IconTrendingUp size={20} />,
+    icon: <IconTrendingDown size={20} />,
     label: 'Reduce',
     sublabel: 'Measure',
     description:
@@ -222,32 +222,29 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ opened, onClose, o
 
         {/* Populate with data toggle */}
         <PopulateSection>
-          <Switch
-            checked={populateWithData}
-            onChange={(e) => setPopulateWithData(e.currentTarget.checked)}
-            label={
-              <SwitchLabel>
-                <span>Populate with sample data</span>
-                <Tooltip
-                  label='Generates 90 days of realistic activity data for testing. Only available in prototype.'
-                  position='top'
-                  multiline
-                  maw={240}
-                  withArrow
-                >
-                  <InfoIconWrapper>
-                    <IconInfoCircle size={14} />
-                  </InfoIconWrapper>
-                </Tooltip>
-              </SwitchLabel>
-            }
-            color='gray'
-            styles={{
-              track: {
-                cursor: 'pointer',
-              },
-            }}
-          />
+          <SwitchRow>
+            <Switch
+              checked={populateWithData}
+              onChange={(e) => setPopulateWithData(e.currentTarget.checked)}
+              label='Populate with sample data'
+              color='gray'
+              styles={{
+                track: { cursor: 'pointer' },
+                label: { fontSize: 13, color: '#5a5248' },
+              }}
+            />
+            <Tooltip
+              label='Generates 90 days of realistic activity data for testing. Only available in prototype.'
+              position='top'
+              multiline
+              maw={240}
+              withArrow
+            >
+              <Box component='span' display='inline-flex' c='#9c9488' style={{ cursor: 'help', alignItems: 'center' }}>
+                <IconInfoCircle size={14} />
+              </Box>
+            </Tooltip>
+          </SwitchRow>
         </PopulateSection>
 
         {/* Actions */}
@@ -341,23 +338,10 @@ const PopulateSection = styled.div`
   border: 1px solid #eae6de;
 `;
 
-const SwitchLabel = styled.div`
+const SwitchRow = styled.div`
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #5a5248;
-`;
-
-const InfoIconWrapper = styled.span`
-  display: inline-flex;
-  color: #9c9488;
-  cursor: help;
-  align-items: center;
-
-  &:hover {
-    color: #5a5248;
-  }
 `;
 
 const ActionButtons = styled.div`
