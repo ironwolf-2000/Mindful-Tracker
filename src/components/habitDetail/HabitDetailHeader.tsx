@@ -107,7 +107,7 @@ export const HabitDetailHeader: React.FC<HabitDetailHeaderProps> = ({
               onChange={(e) => onLoggingChange(e.currentTarget.checked)}
               size='md'
               color='gray'
-              label='Done'
+              label={habit.type === 'Start' ? 'Done' : 'Failed'}
             />
           ) : (
             <>

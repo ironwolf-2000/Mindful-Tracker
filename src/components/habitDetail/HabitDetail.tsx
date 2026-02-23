@@ -81,9 +81,9 @@ export const HabitDetail: React.FC<HabitDetailProps> = ({
   const [reflectionSaved, setReflectionSaved] = useState(false);
   const [reflections, setReflections] = useState<Reflection[]>([]);
 
-  const consistency = calculateConsistency(habit.dailyLogs, selectedPeriod);
-  const recoveryLatency = calculateRecoveryLatency(habit.dailyLogs, selectedPeriod);
-  const stability = calculateStability(habit.dailyLogs, selectedPeriod);
+  const consistency = calculateConsistency(habit.dailyLogs, selectedPeriod, habit.type, habit.goal);
+  const recoveryLatency = calculateRecoveryLatency(habit.dailyLogs, selectedPeriod, habit.type);
+  const stability = calculateStability(habit.dailyLogs, selectedPeriod, habit.type);
   const hiiScore = calculateHIIScore(consistency, recoveryLatency, stability);
 
   useEffect(() => {

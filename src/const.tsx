@@ -119,7 +119,7 @@ export const initialHabits: Habit[] = [
     goal: 5, // NEW: 5km per day goal
     logged: runningLogs[runningLogs.length - 1]?.value || 0,
     hiiLevel: 'Stable',
-    missedStreak: calculateMissedStreak(runningLogs),
+    missedStreak: calculateMissedStreak(runningLogs, 'Start'),
     dailyLogs: runningLogs,
     reflections: generateReflections(runningLogs, 1),
   },
@@ -132,7 +132,7 @@ export const initialHabits: Habit[] = [
     goal: 25, // NEW: 25 pages per day goal
     logged: readingLogs[readingLogs.length - 1]?.value || 0,
     hiiLevel: 'Internalized',
-    missedStreak: calculateMissedStreak(readingLogs),
+    missedStreak: calculateMissedStreak(readingLogs, 'Start'),
     dailyLogs: readingLogs,
     reflections: generateReflections(readingLogs, 2),
   },
@@ -145,7 +145,7 @@ export const initialHabits: Habit[] = [
     goal: undefined, // Qualitative habits don't need numeric goals
     logged: (meditationLogs[meditationLogs.length - 1]?.value as boolean) || false,
     hiiLevel: 'Emerging',
-    missedStreak: calculateMissedStreak(meditationLogs),
+    missedStreak: calculateMissedStreak(meditationLogs, 'Start'),
     dailyLogs: meditationLogs,
     reflections: generateReflections(meditationLogs, 3),
   },

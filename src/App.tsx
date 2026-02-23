@@ -126,7 +126,7 @@ export const App: React.FC = () => {
         }
 
         // Recalculate missed streak
-        const newMissedStreak = calculateMissedStreak(updatedLogs);
+        const newMissedStreak = calculateMissedStreak(updatedLogs, h.type);
 
         return {
           ...h,
@@ -160,7 +160,7 @@ export const App: React.FC = () => {
       goal: habitData.goal,
       logged: todayValue,
       hiiLevel: 'Emerging',
-      missedStreak: calculateMissedStreak(dailyLogs),
+      missedStreak: calculateMissedStreak(dailyLogs, habitData.type),
       reflections: [],
       dailyLogs,
     };

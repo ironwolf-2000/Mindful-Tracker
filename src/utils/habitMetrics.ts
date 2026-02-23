@@ -1,4 +1,4 @@
-import type { DailyLog, Habit, HabitStatus, TimePeriod } from '@/types';
+import type { DailyLog, Habit, HabitStatus, HabitType, TimePeriod } from '@/types';
 
 /**
  * Get date range for a given period
@@ -10,13 +10,20 @@ export function getDateRangeForPeriod(period: TimePeriod): { start: Date; end: D
   const start = new Date(today);
 
   if (period === 'week') {
-    start.setDate(today.getDate() - 6); // Last 7 days
+    // Monday of current week
+    const dayOfWeek = today.getDay(); // 0 = Sunday
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    start.setDate(today.getDate() - daysFromMonday);
   } else if (period === 'month') {
-    start.setDate(today.getDate() - 29); // Last 30 days
+    // 1st of current month
+    start.setDate(1);
   } else if (period === 'quarter') {
-    start.setDate(today.getDate() - 89); // Last 90 days
+    // 1st of current quarter (Q1=Jan, Q2=Apr, Q3=Jul, Q4=Oct)
+    const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
+    start.setMonth(quarterStartMonth, 1);
   } else {
-    start.setDate(today.getDate() - 364); // Last 365 days
+    // 1st of January of current year
+    start.setMonth(0, 1);
   }
 
   return { start, end };
@@ -29,40 +36,42 @@ export function filterLogsByPeriod(logs: DailyLog[], period: TimePeriod): DailyL
   const { start, end } = getDateRangeForPeriod(period);
 
   return logs.filter((log) => {
-    const logDate = new Date(log.date);
+    const logDate = new Date(log.date + 'T00:00:00');
     logDate.setHours(0, 0, 0, 0);
     return logDate >= start && logDate <= end;
   });
 }
 
-/**
- * Calculate consistency: percentage of days the habit was completed
- * For Qualitative: % of days logged as true
- * For Quantitative: % of days with value > 0
- */
-export function calculateConsistency(logs: DailyLog[], period: TimePeriod): number {
+export function calculateConsistency(
+  logs: DailyLog[],
+  period: TimePeriod,
+  habitType: HabitType,
+  goal?: number,
+): number {
   const filteredLogs = filterLogsByPeriod(logs, period);
   if (filteredLogs.length === 0) return 0;
 
   const completedDays = filteredLogs.filter((log) => {
     if (typeof log.value === 'boolean') {
-      return log.value === true;
+      return habitType === 'Start' ? log.value === true : log.value === false;
     }
-    return log.value > 0;
+
+    const numValue = log.value as number;
+
+    if (goal !== undefined && goal > 0) {
+      return habitType === 'Start' ? numValue >= goal : numValue <= goal;
+    }
+
+    return habitType === 'Start' ? numValue > 0 : numValue === 0;
   }).length;
 
   return Math.round((completedDays / filteredLogs.length) * 100);
 }
 
-/**
- * Calculate recovery latency: average days to resume after missing
- * Logic: Find gaps (consecutive missed days), then calculate average time to resume
- */
-export function calculateRecoveryLatency(logs: DailyLog[], period: TimePeriod): number {
+export function calculateRecoveryLatency(logs: DailyLog[], period: TimePeriod, habitType: HabitType): number {
   const filteredLogs = filterLogsByPeriod(logs, period);
   if (filteredLogs.length < 2) return 0;
 
-  // Sort logs by date
   const sortedLogs = [...filteredLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const lapses: number[] = [];
@@ -70,12 +79,18 @@ export function calculateRecoveryLatency(logs: DailyLog[], period: TimePeriod): 
 
   for (let i = 0; i < sortedLogs.length; i++) {
     const log = sortedLogs[i];
-    const isMissed = typeof log.value === 'boolean' ? !log.value : log.value === 0;
+
+    // Determine if this day was "missed" based on habit type
+    let isMissed: boolean;
+    if (typeof log.value === 'boolean') {
+      isMissed = habitType === 'Start' ? !log.value : log.value;
+    } else {
+      isMissed = habitType === 'Start' ? log.value === 0 : log.value > 0;
+    }
 
     if (isMissed) {
       currentLapse++;
     } else if (currentLapse > 0) {
-      // Resumed after a lapse
       lapses.push(currentLapse);
       currentLapse = 0;
     }
@@ -87,44 +102,41 @@ export function calculateRecoveryLatency(logs: DailyLog[], period: TimePeriod): 
   return parseFloat(avgLapse.toFixed(1));
 }
 
-/**
- * Calculate stability: inverse of coefficient of variation
- * Measures consistency of weekly completion rates
- */
-export function calculateStability(logs: DailyLog[], period: TimePeriod): number {
+export function calculateStability(logs: DailyLog[], period: TimePeriod, habitType: HabitType): number {
   const filteredLogs = filterLogsByPeriod(logs, period);
   if (filteredLogs.length < 7) return 0;
 
-  // Group logs by week
-  const weeklyCompletions: number[] = [];
-  let currentWeek: DailyLog[] = [];
-
   const sortedLogs = [...filteredLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const weekMap = new Map<string, DailyLog[]>();
 
-  sortedLogs.forEach((log, index) => {
-    currentWeek.push(log);
+  sortedLogs.forEach((log) => {
+    const d = new Date(log.date + 'T00:00:00');
+    const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - dayOfWeek);
+    const weekKey = monday.toISOString().split('T')[0];
 
-    if (currentWeek.length === 7 || index === sortedLogs.length - 1) {
-      const completed = currentWeek.filter((l) => {
-        if (typeof l.value === 'boolean') return l.value;
-        return l.value > 0;
-      }).length;
+    if (!weekMap.has(weekKey)) weekMap.set(weekKey, []);
+    weekMap.get(weekKey)!.push(log);
+  });
 
-      weeklyCompletions.push((completed / currentWeek.length) * 100);
-      currentWeek = [];
-    }
+  const weeklyCompletions = Array.from(weekMap.values()).map((week) => {
+    const completed = week.filter((l) => {
+      if (typeof l.value === 'boolean') {
+        return habitType === 'Start' ? l.value : !l.value;
+      }
+      return habitType === 'Start' ? l.value > 0 : l.value === 0;
+    }).length;
+    return (completed / week.length) * 100;
   });
 
   if (weeklyCompletions.length < 2) return 0;
 
-  // Calculate coefficient of variation (CV)
   const mean = weeklyCompletions.reduce((sum, v) => sum + v, 0) / weeklyCompletions.length;
   const variance = weeklyCompletions.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / weeklyCompletions.length;
   const stdDev = Math.sqrt(variance);
   const cv = mean > 0 ? stdDev / mean : 1;
 
-  // Convert to stability: lower CV = higher stability
-  // CV of 0 = 100% stable, CV of 1+ = 0% stable
   const stability = Math.max(0, Math.min(100, (1 - cv) * 100));
 
   return Math.round(stability);
@@ -139,18 +151,19 @@ export function getActivityForDate(logs: DailyLog[], date: Date): boolean | numb
   return log ? log.value : null;
 }
 
-/**
- * Calculate current missed streak
- */
-export function calculateMissedStreak(logs: DailyLog[]): number {
+export function calculateMissedStreak(logs: DailyLog[], habitType: 'Start' | 'Stop'): number {
   if (logs.length === 0) return 0;
 
-  // Sort logs by date descending (most recent first)
   const sortedLogs = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   let streak = 0;
   for (const log of sortedLogs) {
-    const isMissed = typeof log.value === 'boolean' ? !log.value : log.value === 0;
+    let isMissed: boolean;
+    if (typeof log.value === 'boolean') {
+      isMissed = habitType === 'Start' ? !log.value : log.value;
+    } else {
+      isMissed = habitType === 'Start' ? log.value === 0 : log.value > 0;
+    }
 
     if (isMissed) {
       streak++;

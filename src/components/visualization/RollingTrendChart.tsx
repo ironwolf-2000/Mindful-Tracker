@@ -93,7 +93,7 @@ function generateRealData(habit: Habit, period: TimePeriod, mode: DateRangeMode)
     data.push({
       date: date.toISOString().split('T')[0],
       daily,
-      average: 0, // Will calculate below
+      average: 0,
     });
   }
 
